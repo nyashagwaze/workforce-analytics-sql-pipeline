@@ -3,12 +3,16 @@
 I built this project as a SQL case study around one practical workforce analytics issue:
 when employees move between roles over time, timesheet reporting is often joined to the wrong role context.
 
+This is a recreation of real work I delivered during my apprenticeship, rebuilt end-to-end with synthetic data so I can safely show the business use case and my SQL decision-making.
+
 My objective was to show that I can design a robust SQL pipeline, model it for analytics, and prove data quality with explicit validation evidence.
 
 ## Problem I Solved
 
 In many reporting stacks, timesheets are joined to the latest employee role record, not the role that was valid on the work date.
 That creates incorrect historical labor attribution by role, business unit, and cost centre.
+
+This was the same core reporting problem I addressed in production during my apprenticeship, and here I have reproduced the logic with synthetic data to make the approach portfolio-safe.
 
 I solved this by:
 - Matching each timesheet row to position history using temporal logic.
