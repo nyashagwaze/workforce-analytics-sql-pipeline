@@ -1,132 +1,120 @@
 # Workforce Analytics SQL Pipeline
 
-SQL-first portfolio project for a workforce analytics business case:
-align each timesheet row to the correct historical employee position, then build a validated project activity fact table.
+I built this project as a SQL case study around one practical workforce analytics issue:
+when employees move between roles over time, timesheet reporting is often joined to the wrong role context.
 
-This repository demonstrates:
-- Temporal matching logic (`FLOOR` then `CEILING`) using SQL window functions
-- Deduplication and deterministic tie-breaking with `ROW_NUMBER()`
-- Row-fidelity guarantees from raw timesheets to final outputs
-- Practical validation patterns for business trust in labor reporting
+My objective was to show that I can design a robust SQL pipeline, model it for analytics, and prove data quality with explicit validation evidence.
 
-## Business Value
+## Problem I Solved
 
-When employees move between roles and cost centres, naive joins to "latest role" produce incorrect historical reporting.
-This pipeline solves that by matching each timesheet entry to role context at the actual work date and validating the result quality.
+In many reporting stacks, timesheets are joined to the latest employee role record, not the role that was valid on the work date.
+That creates incorrect historical labor attribution by role, business unit, and cost centre.
 
-## Core Outputs
+I solved this by:
+- Matching each timesheet row to position history using temporal logic.
+- Building a project activity fact output at row-level grain.
+- Adding validation layers to prove row fidelity, key integrity, and explainable variance outcomes.
 
-- `position_history_timesheets`: timesheets enriched with temporal position context and FTE capacity metrics
-- `project_activity_timesheets`: project activity fact table with assignment scoring, variance checks, and recommendations
+## What I Built
 
-## FTE Methodology (Key Business Logic)
+Main SQL outputs:
+- `position_history_timesheets`
+  This output enriches each timesheet row with matched position history and capacity context.
+- `project_activity_timesheets`
+  This output adds project mapping, assignment scoring, FTE variance signals, and recommendation flags.
 
-This step is included and is central to the validation case.
+## Modeling Design (Star-Schema Style)
 
-1. Match each timesheet row to position history at the row date:
-- Match on employee
-- Prefer most recent prior effective record (`FLOOR`)
-- If no prior record, use earliest future record (`CEILING`)
+I used star-schema thinking so the final data is easy to report from and easy to audit.
 
-2. Pull the matched employee FTE from position history:
-- `fte` comes from the matched position-history row (not from the timesheet input)
+- Fact-style table:
+  `project_activity_timesheets` at timesheet-row grain.
+- Dimension-style context:
+  Employee position attributes, project attributes, and calendar buckets.
+- Bridge/enrichment layer:
+  `position_history_timesheets` creates the time-correct employee context before final fact scoring.
+- Lineage key:
+  `unique_row_id` preserves traceability back to raw source rows.
 
-3. Calculate expected capacity from matched FTE:
+## Core SQL Logic
+
+### Temporal Position Matching
+
+For each timesheet row:
+1. Match on employee.
+2. Prefer the most recent prior effective position (`FLOOR`).
+3. If no prior record exists, use earliest future effective position (`CEILING`).
+4. Use deterministic tie-breaking with `ROW_NUMBER()`.
+
+### FTE Capacity and Variance Method
+
+After temporal matching, I pull the matched `fte` from position history and calculate expected capacity:
 - `calculated_daily_fte = daily_bookable_hours * fte`
 - `calculated_weekly_fte = weekly_bookable_hours * fte`
 
-4. Calculate consumed FTE and variance checks:
+Then I calculate consumed and variance metrics:
 - `timesheet_fte_consumed = (hours / calculated_daily_fte) / dup_count` for valid work rows
 - `fte_variance = timesheet_fte_consumed - resource_consumed_fte`
-- Recommendation flags (`Aligned`, `Mismatch`, `No resource FTE`, `Not applicable`) are derived from this variance and match context.
+
+Final recommendation flags:
+- `Aligned`
+- `Mismatch`
+- `No resource FTE`
+- `Not applicable (Overhead/Off_Work)`
+
+## Validation Framework
+
+I built validation as a first-class output, not an afterthought:
+- Row-count reconciliation from source to both outputs.
+- Distinct key parity (`source_row_hash` to `unique_row_id`).
+- Temporal match distribution checks (`FLOOR` vs `CEILING`).
+- Mapping strength and assignment-source coverage checks.
+- FTE variance distribution and mismatch drilldown.
 
 ## SQL Showcase Notebooks
 
-Run these in order:
+These are the main artifacts I would ask an employer to review.
+
+Run in order:
 1. [05_sql_only_position_history_timesheets.ipynb](notebooks/05_sql_only_position_history_timesheets.ipynb)
 2. [06_sql_only_project_activity_timesheets.ipynb](notebooks/06_sql_only_project_activity_timesheets.ipynb)
 
-Both notebooks are SQL-only and include validations directly under build steps.
-
-## Pipeline
-
-`Synthetic Data -> Load -> Dedup -> Enrich -> Temporal Match -> Activity Mapping -> Validate`
-
-![Pipeline flow](docs/screenshots/pipeline_flow.png)
-
-## Data Model (ERD)
-
-Entity relationship model for source and output tables:
-
-![ERD](docs/screenshots/erd.png)
+Both notebooks are SQL-only and include build logic plus validations directly underneath.
 
 ## Visual Evidence
 
-### Position History Build
+### Pipeline
 
-`position_history_timesheets` build summary (row fidelity and temporal match distribution):
+`Base Timesheets -> Dedup -> Enrich -> Temporal Match -> Activity Mapping -> Validate`
+
+![Pipeline flow](docs/screenshots/pipeline_flow.png)
+
+### Data Model (ERD)
+
+![ERD](docs/screenshots/erd.png)
+
+### Position History Build
 
 ![Position history build](docs/screenshots/position_history_build.png)
 
 ### Project Activity Build
 
-`project_activity_timesheets` build summary (row preservation and project mapping coverage):
-
 ![Project activity build](docs/screenshots/project_activity_build.png)
 
 ### Validation Snapshot
-
-Recommendation and mapping-strength distributions from validation outputs:
 
 ![Validation checks](docs/screenshots/validation_checks.png)
 
 ### Mismatch Drilldown
 
-Absolute FTE variance distribution and highest-variance rows:
-
 ![Mismatch drilldown](docs/screenshots/mismatch_drilldown.png)
 
 ### Dashboard Mock
 
-Single-view KPI summary for stakeholder reporting:
-
 ![Dashboard mock](docs/screenshots/dashboard_mock.png)
 
-## Quickstart
+## Example Results (Local Run, March 1, 2026)
 
-1. Create and activate a virtual environment.
-2. Install notebook SQL dependencies:
-```bash
-python -m pip install jupysql ipython-sql sqlalchemy psycopg2-binary
-```
-3. Ensure Postgres is running and create database `workforce_analytics`.
-4. Load CSV inputs from `data/synthetic` into Postgres tables:
-- `employees`
-- `employee_position_history`
-- `projects`
-- `timesheets`
-
-You can load with pgAdmin Import/Export, or with your own SQL/ETL workflow.
-5. Open and run notebook `05` top-to-bottom:
-```bash
-notebooks/05_sql_only_position_history_timesheets.ipynb
-```
-6. Open and run notebook `06` top-to-bottom:
-```bash
-notebooks/06_sql_only_project_activity_timesheets.ipynb
-```
-
-## Key Techniques
-
-- Temporal candidate ranking with `ROW_NUMBER()` and explicit priority ordering
-- Deterministic deduplication of project keys
-- Hash-based row reconciliation to prove no row loss
-- Coverage and anomaly checks for reporting confidence
-- Recommendation flags (`Aligned`, `Mismatch`, `No resource FTE`, `Not applicable`)
-
-## Example Validation Results
-
-From a local run on March 1, 2026:
 - `timesheets`: `40,000` rows
 - `position_history_timesheets`: `40,000` rows
 - `project_activity_timesheets`: `40,000` rows
@@ -138,9 +126,19 @@ Recommendation split:
 - `No resource FTE`: `7,192`
 - `Aligned`: `5,384`
 
-## Project Structure
+## How To Review
+
+Minimum prerequisite:
+- PostgreSQL with source tables loaded:
+  `employees`, `employee_position_history`, `projects`, `timesheets`
+
+Review flow:
+1. Run notebook `05`
+2. Run notebook `06`
+3. Compare SQL outputs with validation screenshots in `docs/screenshots`
+
+## Repository Structure
 
 - `notebooks`: SQL-only showcase notebooks
-- `data/synthetic`: generated CSV inputs
 - `diagrams`: ERD and pipeline visuals
 - `docs`: business context, assumptions, data dictionary, validation strategy
