@@ -27,31 +27,30 @@ Main SQL outputs:
 - `project_activity_timesheets`
   This output adds project mapping, assignment scoring, FTE variance signals, and recommendation flags.
 
-## STAR Summary (Scenario, Task, Action, Reflection)
+## Situation, Task, Action, Result
 
-### Scenario
-During my apprenticeship, I worked on workforce reporting where timesheets needed to be attributed to the correct role and capacity context on the exact work date.
-The recurring issue was that many joins used "latest role" logic, which distorted historical reporting.
+### Situation
+The organisation needed better visibility into workforce utilisation and FTE allocation accuracy.
+Timesheets were being reported against projects without strong validation against historical position records.
+Because employees changed role, cost centre, and contracted FTE over time, this created risk of incorrect FTE calculations, misaligned reporting by business unit, hidden anomalies, and duplicate or mismatched joins.
+This portfolio project recreates the same business scenario from my apprenticeship using synthetic data.
 
 ### Task
-Recreate that business problem as a portfolio project and demonstrate, with SQL, how to:
-- perform correct temporal matching,
-- preserve row-level traceability,
-- and validate output quality in a way that is reviewable by employers.
+I needed to design a SQL pipeline that would accurately align each timesheet row to the correct historical position record, enrich with deduplicated project metadata, calculate FTE-adjusted utilisation, detect anomalies, and prove no row loss or artificial duplication.
+The goal was to build a reliable analytical layer for workforce reporting and investigation.
 
 ### Action
-I built a two-stage SQL pipeline:
-- `position_history_timesheets` to perform deterministic temporal matching (`FLOOR`/`CEILING` logic with tie-break ranking),
-- `project_activity_timesheets` to add project mapping, capacity context, and FTE variance signals.
+1. Data modelling and temporal alignment. I joined `timesheets` to `employee_position_history` using date-aware logic, prioritized floor matches (latest effective record before entry date), applied deterministic ranking with `ROW_NUMBER()`, and handled edge cases such as no prior record, overlapping periods, and null end dates.
+2. Project metadata deduplication. I identified duplicate `project_code` records in `projects`, ranked candidates by recency, and selected a single canonical project row for enrichment.
+3. FTE and utilisation calculations. I pulled matched historical `fte` into `position_history_timesheets`, then calculated expected capacity and utilisation metrics in `project_activity_timesheets`, including `calculated_daily_fte`, `calculated_weekly_fte`, `timesheet_fte_consumed`, and `fte_variance`.
+4. Validation and data integrity controls. I implemented row-count reconciliation, distinct key parity checks (`source_row_hash` to `unique_row_id`), duplicate audits, null coverage checks, and temporal match distribution checks.
+5. Anomaly detection outputs. I produced explainable recommendation flags (`Aligned`, `Mismatch`, `No resource FTE`, `Not applicable (Overhead/Off_Work)`) to support business-led review rather than automated judgement.
 
-I then added validation queries directly under the build SQL to prove:
-- row-count and key parity,
-- matching behavior distributions,
-- and explainable recommendation outcomes.
-
-### Reflection
-This recreation let me show the same decision quality I used in production, while using synthetic data.
-The strongest lesson was that temporal joins and validation design are as important as transformation logic if the output will drive workforce decisions.
+### Result
+The local run produced full row-level reconciliation from source to outputs: `40,000` rows in `timesheets`, `40,000` in `position_history_timesheets`, and `40,000` in `project_activity_timesheets`.
+Distinct business keys were preserved (`36,800`).
+Recommendation outcomes were surfaced as a structured shortlist: `14,821` Not applicable, `12,603` Mismatch, `7,192` No resource FTE, and `5,384` Aligned.
+This demonstrates temporal SQL modelling, integrity-first validation, and practical workforce anomaly analysis in a portfolio-safe recreation of real apprenticeship work.
 
 ## Data Model Choice
 
