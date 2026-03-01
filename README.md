@@ -27,18 +27,39 @@ Main SQL outputs:
 - `project_activity_timesheets`
   This output adds project mapping, assignment scoring, FTE variance signals, and recommendation flags.
 
-## Modeling Design (Star-Schema Style)
+## STAR Summary (Scenario, Task, Action, Reflection)
 
-I used star-schema thinking so the final data is easy to report from and easy to audit.
+### Scenario
+During my apprenticeship, I worked on workforce reporting where timesheets needed to be attributed to the correct role and capacity context on the exact work date.
+The recurring issue was that many joins used "latest role" logic, which distorted historical reporting.
 
-- Fact-style table:
-  `project_activity_timesheets` at timesheet-row grain.
-- Dimension-style context:
-  Employee position attributes, project attributes, and calendar buckets.
-- Bridge/enrichment layer:
-  `position_history_timesheets` creates the time-correct employee context before final fact scoring.
-- Lineage key:
-  `unique_row_id` preserves traceability back to raw source rows.
+### Task
+Recreate that business problem as a portfolio project and demonstrate, with SQL, how to:
+- perform correct temporal matching,
+- preserve row-level traceability,
+- and validate output quality in a way that is reviewable by employers.
+
+### Action
+I built a two-stage SQL pipeline:
+- `position_history_timesheets` to perform deterministic temporal matching (`FLOOR`/`CEILING` logic with tie-break ranking),
+- `project_activity_timesheets` to add project mapping, capacity context, and FTE variance signals.
+
+I then added validation queries directly under the build SQL to prove:
+- row-count and key parity,
+- matching behavior distributions,
+- and explainable recommendation outcomes.
+
+### Reflection
+This recreation let me show the same decision quality I used in production, while using synthetic data.
+The strongest lesson was that temporal joins and validation design are as important as transformation logic if the output will drive workforce decisions.
+
+## Data Model Choice
+
+I kept the model intentionally practical for analytics and auditability:
+- Source tables: `employees`, `employee_position_history`, `projects`, `timesheets`
+- Enrichment layer: `position_history_timesheets` (time-correct role/FTE context)
+- Final fact-style output: `project_activity_timesheets` at timesheet-row grain
+- Lineage key: `unique_row_id` for traceability back to source records
 
 ## Core SQL Logic
 
