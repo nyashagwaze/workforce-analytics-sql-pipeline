@@ -1,0 +1,48 @@
+// DBML placeholder. Expand with full schema details.
+
+Table employees {
+  employee_id int [pk]
+  employee_number varchar
+  full_name varchar
+  email varchar
+  hire_date date
+  termination_date date
+  home_cost_centre varchar
+}
+
+Table employee_position_history {
+  position_history_id int [pk]
+  employee_id int
+  effective_start_date date
+  effective_end_date date
+  job_title varchar
+  cost_centre varchar
+  fte decimal
+  updated_at timestamp
+}
+
+Table projects {
+  project_id int [pk]
+  project_code varchar [note: 'Business key used to join from timesheets']
+  project_name varchar
+  client_name varchar
+  project_status varchar
+  start_date date
+  end_date date
+  updated_at timestamp
+}
+
+Table timesheets {
+  timesheet_id int [pk]
+  employee_id int
+  entry_date date
+  project_code varchar
+  hours decimal
+  activity_code varchar
+  receiver varchar
+  source_row_hash varchar
+}
+
+Ref: employee_position_history.employee_id > employees.employee_id
+Ref: timesheets.employee_id > employees.employee_id
+Ref: timesheets.project_code > projects.project_code
