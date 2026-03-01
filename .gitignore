@@ -1,0 +1,7 @@
+.venv/
+.env
+__pycache__/
+.ipynb_checkpoints/
+.pytest_cache/
+*.pyc
+Building_fact_project_activity (1).ipynb
